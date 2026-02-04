@@ -2,13 +2,22 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Build and Test Project",
+			"label": "Syntax Check",
 			"type": "shell",
-			"command": "npm run build && npm test",
+			"command": "node --check src/index.js",
 			"args": [],
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Run Assistant",
+			"type": "shell",
+			"command": "npm start",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
 		}
 	]
 }

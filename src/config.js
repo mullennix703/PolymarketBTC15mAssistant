@@ -7,6 +7,13 @@ export const CONFIG = {
   pollIntervalMs: 1_000,
   candleWindowMinutes: 15,
 
+  // Volatility model (used for price-to-beat probability)
+  volLookbackMinutes: Number(process.env.VOL_LOOKBACK_MINUTES || 60),
+  volMinSigmaPerMin: Number(process.env.VOL_MIN_SIGMA_PER_MIN || 0.00005),
+  volMaxSigmaPerMin: Number(process.env.VOL_MAX_SIGMA_PER_MIN || 0.01),
+
+  taTiltAlpha: Number(process.env.TA_TILT_ALPHA || 1.75),
+
   vwapSlopeLookbackMinutes: 5,
   rsiPeriod: 14,
   rsiMaPeriod: 14,

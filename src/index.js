@@ -17,7 +17,13 @@ import { computeRsi, sma, slopeLast } from "./indicators/rsi.js";
 import { computeMacd } from "./indicators/macd.js";
 import { computeHeikenAshi, countConsecutive } from "./indicators/heikenAshi.js";
 import { detectRegime } from "./engines/regime.js";
-import { scoreDirection, applyTimeAwareness } from "./engines/probability.js";
+import {
+  applyTimeAwareness,
+  blendTaWithStrikeProb,
+  estimateMinuteLogReturnVolatility,
+  probFinishAboveStrike,
+  scoreDirection
+} from "./engines/probability.js";
 import { computeEdge, decide } from "./engines/edge.js";
 import { appendCsvRow, formatNumber, formatPct, getCandleWindowTiming, sleep } from "./utils.js";
 import { startBinanceTradeStream } from "./data/binanceWs.js";
@@ -513,6 +519,7 @@ async function main() {
 
       const priceToBeatEarly = priceToBeatState.slug === marketSlugEarly ? priceToBeatState.value : null;
 
+      // TA-only scoring (exclude price-to-beat distance to avoid double counting with strike probability)
       const scored = scoreDirection({
         price: lastPrice,
         priceToBeat: priceToBeatEarly,
@@ -524,16 +531,39 @@ async function main() {
         macd,
         heikenColor: consec.color,
         heikenCount: consec.count,
-        failedVwapReclaim
+        failedVwapReclaim,
+        usePriceToBeatDistance: false
       });
 
-      const timeAware = applyTimeAwareness(scored.rawUp, timeLeftMin, CONFIG.candleWindowMinutes);
+      const timeAwareTa = applyTimeAwareness(scored.rawUp, timeLeftMin, CONFIG.candleWindowMinutes);
+
+      // Volatility-based probability of finishing above the strike (priceToBeat)
+      const vol = estimateMinuteLogReturnVolatility(closes, CONFIG.volLookbackMinutes);
+      const sigmaPerMin = vol.sigma === null ? null : Math.max(CONFIG.volMinSigmaPerMin, Math.min(CONFIG.volMaxSigmaPerMin, vol.sigma));
+      const strikeUp = probFinishAboveStrike({
+        currentPrice: currentPriceEarly ?? lastPrice,
+        priceToBeat: priceToBeatEarly,
+        remainingMinutes: timeLeftMin,
+        sigmaPerMinute: sigmaPerMin,
+        muPerMinute: 0
+      });
+
+      const blended = blendTaWithStrikeProb({
+        taUp: timeAwareTa.adjustedUp,
+        strikeUp,
+        remainingMinutes: timeLeftMin,
+        windowMinutes: CONFIG.candleWindowMinutes,
+        alpha: CONFIG.taTiltAlpha
+      });
+
+      const modelUp = blended.blendedUp;
+      const modelDown = modelUp === null ? null : 1 - modelUp;
 
       const marketUp = poly.ok ? poly.prices.up : null;
       const marketDown = poly.ok ? poly.prices.down : null;
-      const edge = computeEdge({ modelUp: timeAware.adjustedUp, modelDown: timeAware.adjustedDown, marketYes: marketUp, marketNo: marketDown });
+      const edge = computeEdge({ modelUp, modelDown, marketYes: marketUp, marketNo: marketDown });
 
-      const rec = decide({ remainingMinutes: timeLeftMin, edgeUp: edge.edgeUp, edgeDown: edge.edgeDown, modelUp: timeAware.adjustedUp, modelDown: timeAware.adjustedDown });
+      const rec = decide({ remainingMinutes: timeLeftMin, edgeUp: edge.edgeUp, edgeDown: edge.edgeDown, modelUp, modelDown });
 
       const vwapSlopeLabel = vwapSlope === null ? "-" : vwapSlope > 0 ? "UP" : vwapSlope < 0 ? "DOWN" : "FLAT";
 
@@ -555,13 +585,17 @@ async function main() {
       const macdNarrative = narrativeFromSign(macd?.hist ?? null);
       const vwapNarrative = narrativeFromSign(vwapDist);
 
-      const pLong = timeAware?.adjustedUp ?? null;
-      const pShort = timeAware?.adjustedDown ?? null;
+      const pLong = modelUp;
+      const pShort = modelDown;
       const predictNarrative = (pLong !== null && pShort !== null && Number.isFinite(pLong) && Number.isFinite(pShort))
         ? (pLong > pShort ? "LONG" : pShort > pLong ? "SHORT" : "NEUTRAL")
         : "NEUTRAL";
       const predictValue = `${ANSI.green}LONG${ANSI.reset} ${ANSI.green}${formatProbPct(pLong, 0)}${ANSI.reset} / ${ANSI.red}SHORT${ANSI.reset} ${ANSI.red}${formatProbPct(pShort, 0)}${ANSI.reset}`;
       const predictLine = `Predict: ${predictValue}`;
+
+      const strikeProbLine = strikeUp === null
+        ? `${ANSI.gray}-${ANSI.reset}`
+        : `${ANSI.green}UP${ANSI.reset} ${ANSI.green}${formatProbPct(strikeUp, 0)}${ANSI.reset} / ${ANSI.red}DOWN${ANSI.reset} ${ANSI.red}${formatProbPct(1 - strikeUp, 0)}${ANSI.reset}`;
 
       const marketUpStr = `${marketUp ?? "-"}${marketUp === null || marketUp === undefined ? "" : "¢"}`;
       const marketDownStr = `${marketDown ?? "-"}${marketDown === null || marketDown === undefined ? "" : "¢"}`;
@@ -682,6 +716,7 @@ async function main() {
         sepLine(),
         "",
         kv("TA Predict:", predictValue),
+        kv("PTB Prob:", strikeProbLine),
         kv("Heiken Ashi:", heikenLine.split(": ")[1] ?? heikenLine),
         kv("RSI:", rsiLine.split(": ")[1] ?? rsiLine),
         kv("MACD:", macdLine.split(": ")[1] ?? macdLine),
@@ -719,8 +754,8 @@ async function main() {
         timeLeftMin.toFixed(3),
         regimeInfo.regime,
         signal,
-        timeAware.adjustedUp,
-        timeAware.adjustedDown,
+        modelUp,
+        modelDown,
         marketUp,
         marketDown,
         edge.edgeUp,
