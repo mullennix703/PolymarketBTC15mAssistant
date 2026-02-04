@@ -2,11 +2,20 @@ function ema(values, period) {
   if (!Array.isArray(values) || values.length < period) return null;
 
   const k = 2 / (period + 1);
-  let prev = values[0];
-  for (let i = 1; i < values.length; i += 1) {
-    prev = values[i] * k + prev * (1 - k);
+  
+  // Initialize with SMA of first 'period' values
+  let sum = 0;
+  for (let i = 0; i < period; i += 1) {
+    sum += values[i];
   }
-  return prev;
+  let emaValue = sum / period;
+  
+  // Apply EMA formula for remaining values
+  for (let i = period; i < values.length; i += 1) {
+    emaValue = values[i] * k + emaValue * (1 - k);
+  }
+  
+  return emaValue;
 }
 
 export function computeMacd(closes, fast, slow, signal) {
