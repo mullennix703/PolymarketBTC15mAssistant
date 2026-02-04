@@ -494,8 +494,29 @@ async function main() {
         volumeAvg
       });
 
+      // Get currentPrice and priceToBeat early for scoring
+      const currentPriceEarly = chainlink?.price ?? null;
+      const marketSlugEarly = poly.ok ? String(poly.market?.slug ?? "") : "";
+      const marketStartMsEarly = poly.ok && poly.market?.eventStartTime ? new Date(poly.market.eventStartTime).getTime() : null;
+
+      if (marketSlugEarly && priceToBeatState.slug !== marketSlugEarly) {
+        priceToBeatState = { slug: marketSlugEarly, value: null, setAtMs: null };
+      }
+
+      if (priceToBeatState.slug && priceToBeatState.value === null && currentPriceEarly !== null) {
+        const nowMs = Date.now();
+        const okToLatch = marketStartMsEarly === null ? true : nowMs >= marketStartMsEarly;
+        if (okToLatch) {
+          priceToBeatState = { slug: priceToBeatState.slug, value: Number(currentPriceEarly), setAtMs: nowMs };
+        }
+      }
+
+      const priceToBeatEarly = priceToBeatState.slug === marketSlugEarly ? priceToBeatState.value : null;
+
       const scored = scoreDirection({
         price: lastPrice,
+        priceToBeat: priceToBeatEarly,
+        currentPrice: currentPriceEarly,
         vwap: vwapNow,
         vwapSlope,
         rsi: rsiNow,
@@ -578,23 +599,9 @@ async function main() {
         : null;
 
       const spotPrice = wsPrice ?? lastPrice;
-      const currentPrice = chainlink?.price ?? null;
-      const marketSlug = poly.ok ? String(poly.market?.slug ?? "") : "";
-      const marketStartMs = poly.ok && poly.market?.eventStartTime ? new Date(poly.market.eventStartTime).getTime() : null;
-
-      if (marketSlug && priceToBeatState.slug !== marketSlug) {
-        priceToBeatState = { slug: marketSlug, value: null, setAtMs: null };
-      }
-
-      if (priceToBeatState.slug && priceToBeatState.value === null && currentPrice !== null) {
-        const nowMs = Date.now();
-        const okToLatch = marketStartMs === null ? true : nowMs >= marketStartMs;
-        if (okToLatch) {
-          priceToBeatState = { slug: priceToBeatState.slug, value: Number(currentPrice), setAtMs: nowMs };
-        }
-      }
-
-      const priceToBeat = priceToBeatState.slug === marketSlug ? priceToBeatState.value : null;
+      const currentPrice = currentPriceEarly;
+      const marketSlug = marketSlugEarly;
+      const priceToBeat = priceToBeatEarly;
       const currentPriceBaseLine = colorPriceLine({
         label: "CURRENT PRICE",
         price: currentPrice,

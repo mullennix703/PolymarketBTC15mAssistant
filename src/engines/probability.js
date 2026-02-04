@@ -3,6 +3,8 @@ import { clamp } from "../utils.js";
 export function scoreDirection(inputs) {
   const {
     price,
+    priceToBeat,
+    currentPrice,
     vwap,
     vwapSlope,
     rsi,
@@ -15,6 +17,35 @@ export function scoreDirection(inputs) {
 
   let up = 1;
   let down = 1;
+
+  // Price-to-beat distance scoring (highest weight - most important factor)
+  const priceForTarget = currentPrice ?? price;
+  if (priceForTarget !== null && priceToBeat !== null && Number.isFinite(priceForTarget) && Number.isFinite(priceToBeat)) {
+    const distance = (priceForTarget - priceToBeat) / priceToBeat;
+    
+    if (distance > 0.01) {           // Above target by >1%
+      up += 8;
+    } else if (distance > 0.005) {   // Above by 0.5-1%
+      up += 6;
+    } else if (distance > 0.002) {   // Above by 0.2-0.5%
+      up += 4;
+    } else if (distance > 0.0005) {  // Above by 0.05-0.2%
+      up += 2;
+    } else if (distance > 0) {       // Slightly above
+      up += 1;
+    } else if (distance < -0.01) {   // Below target by >1%
+      down += 8;
+    } else if (distance < -0.005) {  // Below by 0.5-1%
+      down += 6;
+    } else if (distance < -0.002) {  // Below by 0.2-0.5%
+      down += 4;
+    } else if (distance < -0.0005) { // Below by 0.05-0.2%
+      down += 2;
+    } else if (distance < 0) {       // Slightly below
+      down += 1;
+    }
+    // distance === 0: no bonus either way
+  }
 
   if (price !== null && vwap !== null) {
     if (price > vwap) up += 2;
