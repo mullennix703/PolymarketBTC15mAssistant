@@ -22,27 +22,44 @@ export function scoreDirection(inputs) {
   const priceForTarget = currentPrice ?? price;
   if (priceForTarget !== null && priceToBeat !== null && Number.isFinite(priceForTarget) && Number.isFinite(priceToBeat)) {
     const distance = (priceForTarget - priceToBeat) / priceToBeat;
+    const absDistance = Math.abs(distance);
     
-    if (distance > 0.01) {           // Above target by >1%
-      up += 8;
-    } else if (distance > 0.005) {   // Above by 0.5-1%
-      up += 6;
-    } else if (distance > 0.002) {   // Above by 0.2-0.5%
-      up += 4;
-    } else if (distance > 0.0005) {  // Above by 0.05-0.2%
-      up += 2;
-    } else if (distance > 0) {       // Slightly above
-      up += 1;
-    } else if (distance < -0.01) {   // Below target by >1%
-      down += 8;
-    } else if (distance < -0.005) {  // Below by 0.5-1%
-      down += 6;
-    } else if (distance < -0.002) {  // Below by 0.2-0.5%
-      down += 4;
-    } else if (distance < -0.0005) { // Below by 0.05-0.2%
-      down += 2;
-    } else if (distance < 0) {       // Slightly below
-      down += 1;
+    // For 15min markets, even small distances matter significantly
+    // Use exponential scoring to make distance dominant
+    if (distance > 0) {
+      // Price is ABOVE target - favors UP
+      if (absDistance > 0.01) {           // >1%
+        up += 20;
+      } else if (absDistance > 0.005) {   // 0.5-1%
+        up += 15;
+      } else if (absDistance > 0.002) {   // 0.2-0.5%
+        up += 12;
+      } else if (absDistance > 0.001) {   // 0.1-0.2%
+        up += 10;
+      } else if (absDistance > 0.0005) {  // 0.05-0.1%
+        up += 8;
+      } else if (absDistance > 0.0002) {  // 0.02-0.05%
+        up += 6;
+      } else {                             // <0.02%
+        up += 4;
+      }
+    } else if (distance < 0) {
+      // Price is BELOW target - favors DOWN
+      if (absDistance > 0.01) {           // >1%
+        down += 20;
+      } else if (absDistance > 0.005) {   // 0.5-1%
+        down += 15;
+      } else if (absDistance > 0.002) {   // 0.2-0.5%
+        down += 12;
+      } else if (absDistance > 0.001) {   // 0.1-0.2%
+        down += 10;
+      } else if (absDistance > 0.0005) {  // 0.05-0.1%
+        down += 8;
+      } else if (absDistance > 0.0002) {  // 0.02-0.05%
+        down += 6;
+      } else {                             // <0.02%
+        down += 4;
+      }
     }
     // distance === 0: no bonus either way
   }

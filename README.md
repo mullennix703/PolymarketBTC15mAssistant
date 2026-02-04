@@ -10,6 +10,8 @@ It combines:
 - Short-term TA snapshot (Heiken Ashi, RSI, MACD, VWAP, Delta 1/3m)
 - A simple live **Predict (LONG/SHORT %)** derived from the assistant’s current TA scoring
 
+## 可以用Polymarket Live Data WebSocket
+
 ## Requirements
 
 - Node.js **18+** (https://nodejs.org/en)
